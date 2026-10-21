@@ -1,0 +1,152 @@
+#!/usr/bin/env ruby
+# git-ff-merge
+
+# 20261022
+# 0.0.0
+
+# Usage:
+# 1. On a branch which has been pushed:
+#  `git ff-merge`
+#   It fast-forwards origin's default branch to the branch and pushes it.
+# 2. Where the base branch isn't origin's default branch:
+#  `git ff-merge <base-branch>`
+# 3. To delete the local branch as well, once merged:
+#  `git ff-merge -d`
+
+# Notes:
+# 1. Fast-forward only, so that the commits on the base branch are the ones which were pushed, signatures and all. Where it cannot fast-forward, it stops without pushing.
+# 2. It knows nothing of any host. A host which marks a pull request merged once the pull request's head commit is on its base branch will do so.
+# 3. Assumes that the remote is called origin.
+
+gem 'git.rb'
+gem 'switches.rb'
+
+require 'Git/Remote'
+require 'switches.rb'
+
+def usage
+  puts "git-ff-merge - Merge a branch by fast-forwarding its base branch and pushing it."
+  puts
+  puts "Usage: git ff-merge [options] [<base-branch>]"
+  puts
+  puts "The base branch is origin's default branch unless given."
+  puts
+  puts "Options:"
+  puts "  -d, --delete-branch  Delete the local branch once merged"
+  puts "  -h, --help           Show this help"
+end
+
+def switches
+  @switches ||= Switches.new do |s|
+    s.boolean(:d, :delete_branch){'Delete the local branch once merged'}
+    s.perform(:h, :help?) do
+      usage
+      exit
+    end
+  end
+end
+
+def validate_args
+  if ARGV.length > 1
+    usage
+    exit 1
+  end
+end
+
+def validate_origin
+  abort "There is no remote called origin." unless Git::Remote.exist?('origin')
+end
+
+def run!(command)
+  system(command) || exit(1)
+end
+
+def branch
+  @branch ||= `git symbolic-ref --quiet --short HEAD`.strip
+end
+
+def validate_branch
+  abort "Not on a branch. Check out the branch to merge." if branch.empty?
+end
+
+def default_branch
+  `git symbolic-ref --quiet --short refs/remotes/origin/HEAD`.strip.delete_prefix('origin/')
+end
+
+def base_branch
+  @base_branch ||= ARGV.first || default_branch
+end
+
+def commit(ref)
+  `git rev-parse --verify --quiet #{ref}`.strip
+end
+
+def validate_base_branch
+  abort <<~MESSAGE if base_branch.empty?
+    origin's default branch isn't known. Name the base branch, or have origin's looked up:
+      git remote set-head origin --auto
+  MESSAGE
+  abort "#{branch} is the base branch. Check out the branch to merge." if branch == base_branch
+  abort "There is no #{base_branch} on origin." if commit("refs/remotes/origin/#{base_branch}").empty?
+end
+
+def pushed?
+  commit("refs/remotes/origin/#{branch}") == commit(branch)
+end
+
+def other_bases
+  @other_bases ||= (
+    refs = `git for-each-ref --merged=#{branch} --no-merged=origin/#{base_branch} --format='%(refname)' refs/remotes/origin`.split
+    (refs - ['refs/remotes/origin/HEAD', "refs/remotes/origin/#{branch}"]).map{|ref| ref.delete_prefix('refs/remotes/')}
+  )
+end
+
+def fast_forwardable?
+  system("git merge-base --is-ancestor origin/#{base_branch} #{branch}")
+end
+
+def validate_mergeable
+  abort "#{branch} isn't on origin as it is here. Push it, then run `git ff-merge` again." unless pushed?
+  abort <<~MESSAGE unless other_bases.empty?
+    #{branch} holds #{other_bases.join(', ')}, which origin/#{base_branch} doesn't, so #{base_branch} may not be its base. Merge those first, or name its base branch:
+      git ff-merge <base-branch>
+  MESSAGE
+  abort <<~MESSAGE unless fast_forwardable?
+    #{base_branch} has moved on since #{branch} was cut. Rebase it and push it, then run `git ff-merge` again:
+      git rebase origin/#{base_branch}
+      git push --force-with-lease
+  MESSAGE
+end
+
+def fast_forward_base_branch
+  system("git merge --ff-only #{branch}") || abort(<<~MESSAGE)
+    #{base_branch} has commits of its own, so it cannot be fast-forwarded to #{branch}. Move them to a branch and put #{base_branch} back:
+      git branch <new-branch>
+      git reset --hard origin/#{base_branch}
+  MESSAGE
+end
+
+def delete_branch
+  run!("git branch -d #{branch}")
+  puts <<~MESSAGE
+    #{branch} remains on origin. Once any pull request for it shows as merged, delete it there too:
+      git push origin --delete #{branch}
+  MESSAGE
+end
+
+def main
+  switches
+  validate_args
+  validate_origin
+  validate_branch
+  run!('git fetch origin')
+  validate_base_branch
+  validate_mergeable
+  run!("git checkout #{base_branch}")
+  fast_forward_base_branch
+  run!("git push origin #{base_branch}")
+  puts "Merged #{branch} into #{base_branch}."
+  delete_branch if switches.delete_branch?
+end
+
+main

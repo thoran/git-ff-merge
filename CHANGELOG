@@ -1,0 +1,10 @@
+# CHANGELOG
+
+## 20261022
+
+0.0.0: Merge a branch by fast-forwarding its base branch and pushing it, knowing nothing of any host.
+
+1. + bin/git-ff-merge: from git-ff-merge-pr 0.1.0, less gh: the base branch from the argument, else origin's default branch; stops where the branch isn't on origin as it is locally, where it holds a branch on origin which the base branch doesn't, or where the base branch has moved on or has commits of its own; otherwise fast-forwards the base branch and pushes it.
+2. + bin/git-ff-merge: -d, --delete-branch: deletes the local branch and gives the command to delete it on origin, there being no telling when a host has marked a pull request merged.
+3. + test/git-ff-merge_test.rb
+4. + README.md, LICENSE, Gemfile, CHANGELOG
