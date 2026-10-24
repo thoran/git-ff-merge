@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 20261024
+
+0.0.1: ~ An argument starting with - which isn't one of -d, --delete-branch, -h or --help stops it upon 'Unknown option' and the usage, before git is touched.
+
+1. + bin/git-ff-merge: options(), validate_options(), called first in main(). An unknown option ended upon a backtrace, and after -- one was passed on as the base branch.
+2. + test/git-ff-merge_test.rb: -h and --help, and unknown options, leave the base branch, origin and HEAD where they were, with nothing fetched.
+3. ~ test/git-ff-merge_test.rb: + fetched?().
+
 ## 20261022
 
 0.0.0: Merge a branch by fast-forwarding its base branch and pushing it, knowing nothing of any host.

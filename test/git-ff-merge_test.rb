@@ -1,7 +1,7 @@
 # test/git-ff-merge_test.rb
 
-# 20261022
-# 0.0.0
+# 20261024
+# 0.0.1
 
 # Each test runs git-ff-merge as a subprocess in a clone of a bare repository
 # made for the purpose, standing in for origin, and asserts upon where the
@@ -39,6 +39,10 @@ end
 
 def origin_sha(branch)
   `git ls-remote origin refs/heads/#{branch}`.split.first
+end
+
+def fetched?
+  File.exist?('.git/FETCH_HEAD')
 end
 
 def in_clone
@@ -209,6 +213,43 @@ describe 'git-ff-merge' do
         _(output).must_include 'git push origin --delete fix'
         _(sha('refs/heads/fix')).must_be_empty
         _(origin_sha('fix')).must_equal fix
+      end
+    end
+  end
+
+  describe 'options' do
+    ['-h', '--help'].each do |option|
+      it "#{option} shows the usage and stops before touching git" do
+        in_clone do
+          branch_from('master', 'fix', 'the fix')
+          git('push', 'origin', 'fix')
+          master = origin_sha('master')
+          status, output = ff_merge(option)
+          _(status).must_equal 0
+          _(output).must_include 'Usage: git ff-merge'
+          _(origin_sha('master')).must_equal master
+          _(sha('master')).must_equal master
+          _(sha('HEAD')).must_equal sha('fix')
+          _(fetched?).must_equal false
+        end
+      end
+    end
+
+    [['--version'], ['--bogus'], ['-x'], ['--del'], ['-dx'], ['develop', '-x'], ['--'], ['--', '--bogus'], ['-h', '--bogus']].each do |arguments|
+      it "stops upon #{arguments.join(' ')} before touching git" do
+        in_clone do
+          branch_from('master', 'fix', 'the fix')
+          git('push', 'origin', 'fix')
+          master = origin_sha('master')
+          status, output = ff_merge(*arguments)
+          _(status).must_equal 1
+          _(output).must_include 'Unknown option'
+          _(output).must_include 'Usage: git ff-merge'
+          _(origin_sha('master')).must_equal master
+          _(sha('master')).must_equal master
+          _(sha('HEAD')).must_equal sha('fix')
+          _(fetched?).must_equal false
+        end
       end
     end
   end

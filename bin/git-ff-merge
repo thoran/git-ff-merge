@@ -1,8 +1,8 @@
 #!/usr/bin/env ruby
 # git-ff-merge
 
-# 20261022
-# 0.0.0
+# 20261024
+# 0.0.1
 
 # Usage:
 # 1. On a branch which has been pushed:
@@ -34,6 +34,19 @@ def usage
   puts "Options:"
   puts "  -d, --delete-branch  Delete the local branch once merged"
   puts "  -h, --help           Show this help"
+end
+
+def options
+  %w{-d --delete-branch -h --help}
+end
+
+def validate_options
+  unknown_options = ARGV.select{|argument| argument.start_with?('-')} - options
+  unless unknown_options.empty?
+    $stderr.puts "Unknown option: #{unknown_options.first}"
+    usage
+    exit 1
+  end
 end
 
 def switches
@@ -135,6 +148,7 @@ def delete_branch
 end
 
 def main
+  validate_options
   switches
   validate_args
   validate_origin
